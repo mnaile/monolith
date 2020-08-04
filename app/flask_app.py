@@ -2,12 +2,28 @@ from flask import Flask, request, jsonify
 from app.model import User, Book, Car
 from app.serializer import UserSchema, BookSchema, CarSchema, UpdateUserSchema, UpdateBookSchema,UpdateCarSchema
 from app_init.app_factory import create_app
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 from http import HTTPStatus
 import os, requests
 
 settings_name = os.getenv("settings")
 app = create_app(settings_name)
+
+
+# LOGIN
+
+@app.route('/users/login', methods=["POST"])
+def get_login():
+    user = request.get_json()
+    user_data : User = User.query.filter_by(email=user.get("email")).first()
+    if user_data:
+        if user_data.check_password(user.get("password")):
+            access_token = create_access_token(identity=user_data.email)
+            user_schema = UserSchema().dump(user_data)
+            user_schema["access_token"]=access_token
+            return jsonify(user_schema),HTTPStatus.OK
+    return jsonify(msg="Incorrect email or password"),HTTPStatus.BAD_REQUEST
 
 
 # CREATE USERS
@@ -55,23 +71,23 @@ def create_cars(id):
 
 # GET USERS
 
-@app.route('/users', methods=["GET"])
-def get_all_users():
-    user_info = User.query.all()
-    return UserSchema(exclude=["password"]).jsonify(user_info, many=True),HTTPStatus.OK
 
-@app.route('/users/<int:id>', methods=["GET"])
-def get_users(id):
-    user_info = User.query.get(id)
+@app.route('/users', methods=["GET"])
+@jwt_required
+def get_users():
+    identity = get_jwt_identity()
+    user_info = User.query.filter_by(email=identity).first()
     if user_info:
         return UserSchema(exclude=["password"]).jsonify(user_info),HTTPStatus.OK
     return jsonify(msg="Not found")
 
 # UPDATE USERS INFO
 
-@app.route('/users/<int:id>', methods=["PUT"])
-def update_users(id):
-    user = User.query.get(id)
+@app.route('/users', methods=["PUT"])
+@jwt_required
+def update_users():
+    identity = get_jwt_identity()
+    user = User.query.filter_by(email=identity).first()
     if user:
         new_user = request.get_json()
         user_data = UpdateUserSchema().load(new_user)
@@ -81,23 +97,30 @@ def update_users(id):
 
 # UPDATE BOOKS INFO
 
-@app.route('/users/<int:user_id>/books/<int:id>', methods=["PUT"])
-def update_books(user_id, id):
-    user_books = Book.query.filter_by(user_id=user_id,id=id).first()
-    if user_books:
-        new_book = request.get_json()
-        book_data = UpdateBookSchema().load(new_book)
-        user_books.update_db(**book_data)
-        return BookSchema().jsonify(new_book),HTTPStatus.OK
+@app.route('/users/books/<int:id>', methods=["PUT"])
+@jwt_required
+def update_books(id):
+    identity = get_jwt_identity()
+    user = User.query.filter_by(email=identity).first()
+    if user:
+        user_books = Book.query.get(id)
+        if user_books:
+            new_book = request.get_json()
+            book_data = UpdateBookSchema().load(new_book)
+            user_books.update_db(**book_data)
+            return BookSchema().jsonify(new_book),HTTPStatus.OK
     return jsonify(msg="Not found"),HTTPStatus.NOT_FOUND
 
 
 # UPDATE CARS INFO
 
 
-@app.route('/users/<int:user_id>/cars/<int:id>', methods=["PUT"])
-def update_car(user_id, id):
-    user_cars = Car.query.filter_by(user_id=user_id, id=id).first()
+@app.route('/users/cars/<int:id>', methods=["PUT"])
+@jwt_required
+def update_car(id):
+    identity = get_jwt_identity()
+    user = User.query.filter_by(email=identity).first()
+    user_cars = Car.query.get(id)
     if user_cars:
         new_car = request.get_json()
         car_data = UpdateCarSchema().load(new_car)
@@ -107,9 +130,11 @@ def update_car(user_id, id):
 
 # DELETE USERS FROM DB
 
-@app.route('/users/<int:id>', methods=["DELETE"])
-def delete_users(id):
-    user_data = User.query.get(id)
+@app.route('/users', methods=["DELETE"])
+@jwt_required
+def delete_users():
+    identity = get_jwt_identity()
+    user_data = User.query.filter_by(email=identity).first()
     if user_data:
         user_data.delete_from_db()
         return jsonify(msg="OK"),HTTPStatus.OK
@@ -118,22 +143,31 @@ def delete_users(id):
 
 # DELETE BOOKS FROM DB
 
-@app.route('/users/<int:user_id>/books/<int:id>', methods=["DELETE"])
-def delete_books(user_id, id):
-    user_books = Book.query.filter_by(user_id=user_id, id=id).first()
-    if user_books:
-        user_books.delete_from_db()
-        return jsonify(msg="OK"),HTTPStatus.OK
+
+@app.route('/users/books/<int:id>', methods=["DELETE"])
+@jwt_required
+def delete_books(id):
+    identity = get_jwt_identity()
+    user = User.query.filter_by(email=identity).first()
+    if user:
+        user_books = Book.query.filter_by( id=id).first()
+        if user_books:
+            user_books.delete_from_db()
+            return jsonify(msg="OK"),HTTPStatus.OK
     return jsonify(msg="Not found"),HTTPStatus.NOT_FOUND
 
 # DELETE CARS FROM DB
 
-@app.route('/users/<int:user_id>/cars/<int:id>', methods=["DELETE"])
-def delete_cars(user_id, id):
-    user_cars = Car.query.filter_by(user_id=user_id, id=id).first()
-    if user_cars:
-        user_cars.delete_from_db()
-        return jsonify(msg="OK"),HTTPStatus.OK
+@app.route('/users/cars/<int:id>', methods=["DELETE"])
+@jwt_required
+def delete_cars(id):
+    identity = get_jwt_identity()
+    user = User.query.filter_by(email=identity).first()
+    if user:
+        user_cars = Car.query.filter_by(id=id).first()
+        if user_cars:
+            user_cars.delete_from_db()
+            return jsonify(msg="OK"),HTTPStatus.OK
     return jsonify(msg="Not found"),HTTPStatus.NOT_FOUND
 
 

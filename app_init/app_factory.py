@@ -1,5 +1,5 @@
 from flask import Flask
-from extension.extension import db,ma,migrate
+from extension.extension import db,ma,migrate,jwt
 
 
 settings = {
@@ -18,6 +18,8 @@ def create_app(settings_name):
     app = Flask(__name__)
     db.init_app(app)
     ma.init_app(app)
+    app.config['JWT_SECRET_KEY'] = 'test12345'
+    jwt.init_app(app)
     migrate.init_app(app, db)
     settings_obj = get_settings(settings_name)
     app.config.from_object(settings_obj)
