@@ -1,5 +1,6 @@
 from settings.settings import BaseSettings
 import os
+from datetime import timedelta
 
 class DevSettings(BaseSettings):
     DEBUG = True
@@ -11,3 +12,6 @@ class DevSettings(BaseSettings):
     DB_USER = os.getenv("DB_USER", "naile")
 
     SQLALCHEMY_DATABASE_URI = f"postgres://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=1)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(minutes=3)

@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from app.model import User, Book, Car
 from app.serializer import UserSchema, BookSchema, CarSchema, UpdateUserSchema, UpdateBookSchema,UpdateCarSchema
 from app_init.app_factory import create_app
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, jwt_refresh_token_required, create_refresh_token
 from marshmallow import ValidationError
 from http import HTTPStatus
 import os, requests
@@ -20,10 +20,25 @@ def get_login():
     if user_data:
         if user_data.check_password(user.get("password")):
             access_token = create_access_token(identity=user_data.email)
+            refresh_token = create_refresh_token(identity=user_data.email)
             user_schema = UserSchema().dump(user_data)
-            user_schema["access_token"]=access_token
+            user_schema["access_token"] = access_token
+            user_schema["refresh_token"] = refresh_token
             return jsonify(user_schema),HTTPStatus.OK
     return jsonify(msg="Incorrect email or password"),HTTPStatus.BAD_REQUEST
+
+
+# REFRESH TOKEN
+
+@app.route('/users/refresh', methods=["POST"])
+@jwt_refresh_token_required
+def refresh():
+    identity = get_jwt_identity()
+    user = User.query.filter_by(email=identity).first()
+    if user:
+        access_token = create_access_token(identity=identity)
+        return jsonify(access_token),HTTPStatus.OK
+    return jsonify(msg="Not found")
 
 
 # CREATE USERS
@@ -107,6 +122,7 @@ def update_books(id):
         if user_books:
             new_book = request.get_json()
             book_data = UpdateBookSchema().load(new_book)
+            book_data.user_id = user.id   
             user_books.update_db(**book_data)
             return BookSchema().jsonify(new_book),HTTPStatus.OK
     return jsonify(msg="Not found"),HTTPStatus.NOT_FOUND
@@ -120,12 +136,14 @@ def update_books(id):
 def update_car(id):
     identity = get_jwt_identity()
     user = User.query.filter_by(email=identity).first()
-    user_cars = Car.query.get(id)
-    if user_cars:
-        new_car = request.get_json()
-        car_data = UpdateCarSchema().load(new_car)
-        user_cars.update_db(**car_data)
-        return CarSchema().jsonify(car_data),HTTPStatus.OK
+    if user:
+        user_cars = Car.query.get(id)
+        if user_cars:
+            new_car = request.get_json()
+            car_data = UpdateCarSchema().load(new_car)
+            car_data.user_id = user.id
+            user_cars.update_db(**car_data)
+            return CarSchema().jsonify(car_data),HTTPStatus.OK
     return jsonify(msg="Not found"),HTTPStatus.NOT_FOUND
 
 # DELETE USERS FROM DB
